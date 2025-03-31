@@ -1,179 +1,193 @@
 import pulp
 import pandas as pd
+import numpy as np
 
-#读取表格上传数据
-file_path = '附件1.xlsx'
-file_path_2 = '附件2.xlsx'
-file_path_3 = '附件3.xlsx'
-df_land = pd.read_excel(file_path, sheet_name='乡村的现有耕地')
-df_crops = pd.read_excel(file_path_2, sheet_name='2023年统计的相关数据')
-df_sells = pd.read_excel(file_path_3)
-
-#创建问题
-model = pulp.LpProblem("Crop_Planting_Optimization", pulp.LpMaximize)
-
-#定义豆类索引
-bean = {1,2,3,4,5,17,18,19}
-
-#整理地块类型并且分类
-A = {row['地块名称']: row['地块面积/亩'] for _, row in df_land.iterrows()}
-
-#计算预期销售量=地块面积*亩产量
-ex_sales = {row['作物编号']: row['总产量'] for _, row in df_sells.iterrows()}
+#基本参数
+years=[i for i in range(2024,2031)]
+seasons=['S1','S2']
+rownames=['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4']
+colnames=['黄豆', '黑豆', '红豆', '绿豆', '爬豆', '小麦', '玉米', '谷子', '高粱', '黍子', '荞麦', '南瓜', '红薯', '莜麦', '大麦', 
+          '水稻', '豇豆', '刀豆', '芸豆', '土豆', '西红柿', '茄子', '菠菜 ', '青椒', '菜花', '包菜', '油麦菜', '小青菜', '黄瓜', '生菜 ', '辣椒', '空心菜', '黄心菜', '芹菜',
+          '大白菜', '白萝卜', '红萝卜', '榆黄菇', '香菇', '白灵菇', '羊肚菌']
+rows={'S1':['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4'], 
+          'S2':['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4'],
+          'Si':['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6']}
 
 #单季地块：A，B，C
-plots_single_season = df_land[df_land['地块类型'].isin(['平旱地','梯田','山坡地'])]['地块名称'].tolist()
-
+i_ABC = rownames[0:26]
 #双季地块：D，E，F
-plots_double_season = df_land[df_land['地块类型'].isin(['水浇地','普通大棚 ','智慧大棚'])]['地块名称'].tolist()
-
+i_DEF = rownames[26:]
 #细分双季节
-irrigated_land = df_land[df_land['地块类型'] == '水浇地']['地块名称'].tolist()
-greenhouse_land = df_land[df_land['地块类型'] == '普通大棚 ']['地块名称'].tolist()
-smart_greenhouse_land = df_land[df_land['地块类型'] == '智慧大棚']['地块名称'].tolist()
+i_D = rownames[26:34]
+i_E = rownames[34:50]
+i_F = rownames[50:]
 
 #定义作物类型
-crops_single_season = list(range(1,16))
-crops_double_season_irrigated = list(range(16, 38))
-crops_double_season_smart = list(range(27, 35))
-crops_double_season_greenhouse = list(range(23, 42))
+j_ABC = {'S1':colnames[0:15],'S2':[]}
+j_D = {'S1':colnames[15:34],'S2':colnames[34:37]}
+j_E = {'S1':colnames[16:34],'S2':colnames[37:]}
+j_F = {'S1':colnames[16:34],'S2':colnames[16:34]}
+#定义豆类作物
+j_bean_ABC = colnames[0:5]
+j_bean_DEF = colnames[16:19]
 
-#处理销售单价取中间值
-df_crops['销售单价（元/斤）'] = df_crops['销售单价/(元/斤)'].apply(
-    lambda x: (float(x.split('-')[0]) + float(x.split('-')[1]))/2 if isinstance(x, str) else x
-)
+#数据读取
+#面积
+S=dict(zip(rownames,list(pd.read_excel('./datas/S.xlsx').values[0])))
 
-#用字典储存销售单价，亩产量和种植成本
-P = {row['作物编号']: row['销售单价（元/斤）'] for _, row in df_crops.iterrows()}
-Y = {row['作物编号']: row['亩产量/斤'] for _, row in df_crops.iterrows()}
-C = {row['作物编号']: row['种植成本/(元/亩)'] for _, row in df_crops.iterrows()}
+#2023年数据读取
+def readfile_0(filename,invalid=0):
+    data_axis1={}
+    for k in seasons:
+        data_axis2={}
+        if k=='S2':
+            for i in rows['Si']:
+                data_axis2[i]={j:invalid for j in colnames}
+        DS=pd.read_excel(filename,sheet_name=0,index_col=[0,1]).loc[k]
+        for i in rows[k]:
+            data_axis2[i]=dict(zip(colnames,list(DS.loc[i].values/S[i])))
+        data_axis1[k]=data_axis2  
+    return data_axis1
 
-#定义决策变量x[i][k][t] 第i块地在第t年的j季节是否种植k作物
-years = list(range(2024, 2031))
-x = pulp.LpVariable.dicts("x", (plots_single_season + plots_double_season,
-                                crops_single_season + crops_double_season_irrigated + crops_double_season_smart + crops_double_season_greenhouse,
-                                years, [1, 2]), 0, 1,cat='continuous')
+#所有年份数据读取
+def readfile_all(filename,invalid=0):
+    data_axis0={}
+    for n in range(8):
+        data_axis1={}
+        for k in seasons:
+            data_axis2={}
+            if k=='S2':
+                for i in rows['Si']:
+                    data_axis2[i]={j:invalid for j in colnames}
+            DS=pd.read_excel(filename,sheet_name=n,index_col=[0,1]).loc[k]
+            for i in rows[k]:
+                data_axis2[i]=dict(zip(colnames,list(DS.loc[i].values)))
+            data_axis1[k]=data_axis2
+        data_axis0[n+2023]=data_axis1
+    return data_axis0
 
-y1 = pulp.LpVariable.dicts("y1", (plots_single_season + plots_double_season,
-                                crops_single_season + crops_double_season_irrigated + crops_double_season_smart + crops_double_season_greenhouse,
-                                years, [1, 2]), 0, 1,cat='Binary')
+#数据组读取
+def read_data(filepacks):
+    #单价
+    p=readfile_all(filepacks+'/P.xlsx')
+    #销量
+    q=readfile_all(filepacks+'/Q.xlsx')
+    #亩产
+    y=readfile_all(filepacks+'/Y.xlsx')
+    #成本
+    c=readfile_all(filepacks+'/C.xlsx',9999999)
+    #2023年种植情况
+    x2023=readfile_0(filepacks+'/X.xlsx')
+    return (p,q,y,c,x2023)
 
-y2 = pulp.LpVariable.dicts("y2", (plots_single_season + plots_double_season,
-                                crops_single_season + crops_double_season_irrigated + crops_double_season_smart + crops_double_season_greenhouse,
-                                years, [1, 2]), 0, 1,cat='Binary')
-
-#超出部分的产量
-#sur = pulp.LpVariable.dicts("sur", (plots_single_season + irrigated_land + greenhouse_land + smart_greenhouse_land,
-                                          #crops_single_season + crops_double_season_irrigated + crops_double_season_greenhouse + crops_double_season_smart,
-                                          #years, [1, 2]), lowBound=0, cat='continuous')
-
-#目标函数：最大利润
-#单季的目标函数
-Z_single = pulp.lpSum(
-    P[k] * min(Y[k] * A[i], ex_sales[k]) * x[i][k][n][1] 
-               + 0.5 * P[k] * max(0, Y[k] * A[i] - ex_sales[k]) * x[i][k][n][1]
-               - C[k] * A[i] * x[i][k][n][1]
-               for n in years
-               for i in plots_single_season
-               for k in crops_single_season
-               )
-
-#双季的目标函数
-Z_irrigated = pulp.lpSum(
-    P[k] * min(Y[k] * A[i], ex_sales[k]) * (x[i][k][n][1] + x[i][k][n][2])
-               + 0.5 * P[k] * max(0, Y[k] * A[i] - ex_sales[k]) * (x[i][k][n][1] + x[i][k][n][2])
-               - C[k] * A[i] * (x[i][k][n][1] + x[i][k][n][2])
-               for n in years
-               for i in irrigated_land
-               for k in crops_double_season_irrigated
-               )
-
-#双季大棚的目标函数
-Z_greenhouse = pulp.lpSum(
-    P[k] * min(Y[k] * A[i], ex_sales[k]) * (x[i][k][n][1] + x[i][k][n][2])
-               + 0.5 * P[k] * max(0, Y[k] * A[i] - ex_sales[k]) * (x[i][k][n][1] + x[i][k][n][2])
-               - C[k] * A[i] * (x[i][k][n][1] + x[i][k][n][2])
-               for n in years
-               for i in greenhouse_land
-               for k in crops_double_season_greenhouse
-               )
-
-#智慧大棚的目标函数
-Z_smart = pulp.lpSum(
-    P[k] * min(Y[k] * A[i], ex_sales[k]) * (x[i][k][n][1] + x[i][k][n][2])
-               + 0.5 * P[k] * max(0, Y[k] * A[i] - ex_sales[k]) * (x[i][k][n][1] + x[i][k][n][2])
-               - C[k] * A[i] * (x[i][k][n][1] + x[i][k][n][2])
-               for n in years
-               for i in smart_greenhouse_land
-               for k in crops_double_season_smart
-               )
-
-model += Z_single + Z_irrigated + Z_greenhouse + Z_smart
-
-#约束条件
-for i in plots_single_season + irrigated_land + greenhouse_land+ smart_greenhouse_land:
-    for k in crops_single_season + crops_double_season_irrigated + crops_double_season_greenhouse + crops_double_season_smart:
+#结果写入表格
+def write_excel(filename,x):
+        file=pd.ExcelWriter(filename)
         for n in years:
-            for j in [1, 2]:
-                model += x[i][k][n][j] == 0.5 * y1[i][k][n][j] + y2[i][k][n][j]
-                model += y1[i][k][n][j] + y2[i][k][n][j] <= 1 #y1 y2不同时为 1
+            dic0={}
+            for j in colnames:
+                dic1={}
+                for k in seasons:
+                    for i in rows[k]:
+                        dic1[(k,i)]=x[n][k][i][j].varValue*S[i]
+                dic0[j]=dic1
+            pd.DataFrame(dic0,columns=colnames).to_excel(file,sheet_name='{0}'.format(n))
+        file.close()
 
-#每种地种不同作物
-for n in years:
-    #单季
-    for i in plots_single_season:
-        model += pulp.lpSum(x[i][k][n][1] for k in crops_single_season) == 1
-    #双季
-    #水浇地
-    for i in irrigated_land:
-        model += pulp.lpSum(x[i][k][n][1] for k in range(16, 35)) == 1
-        model += pulp.lpSum(x[i][k][n][2] for k in [16, 35, 36, 37]) == 1
+#求解：
+def solve_prob(datatuple,output_filename,eta=0): #设置单价衰减系数
+    #数据导入
+    p,q,y,c,x2023 = datatuple
 
-    #普通大棚
-    for i in greenhouse_land:
-        model += pulp.lpSum(x[i][k][n][1] for k in range(17, 35)) == 1
-        model += pulp.lpSum(x[i][k][n][2] for k in range(38, 42)) == 1
+    #创建问题
+    model = pulp.LpProblem("Crop_Planting_Optimization", pulp.LpMaximize)
 
-    #智慧大棚
-    for i in smart_greenhouse_land:
-        model += pulp.lpSum(x[i][k][n][1] for k in range(17, 35)) == 1
-        model += pulp.lpSum(x[i][k][n][2] for k in range(17, 35)) == 1
+    #定义决策变量x[n][k][i][j] i块地在n年的k季节是否种植作物j
+    x = pulp.LpVariable.dicts("x", (years, seasons, rownames, colnames), 0, 1, cat='continuous')
+    y1 = pulp.LpVariable.dicts("y1", (years, seasons, rownames, colnames), 0, 1,cat='Binary')
+    y2 = pulp.LpVariable.dicts("y2", (years, seasons, rownames, colnames), 0, 1,cat='Binary')
 
-#每块地上每种作物比例之和为1
-for n in years:
-    for i in plots_single_season:
-        model += pulp.lpSum(x[i][k][n][1] for k in crops_single_season) == 1
+    #目标函数：最大利润
+    #利润目标函数
+    Profit = pulp.lpSum(
+                p[n][k][i][j] * min(y[n][k][i][j] * S[i], q[n][k][i][j]) * x[n][k][i][j]
+                + eta * p[n][k][i][j] * max(0, y[n][k][i][j] * S[i] - q[n][k][i][j]) * x[n][k][i][j]
+                - c[n][k][i][j] * S[i] * x[n][k][i][j]
+                for n in years
+                for k in seasons
+                for i in rows[k]
+                for j in colnames
+                )
+    model += Profit
 
-    for i in plots_double_season:
-        for j in [1, 2]:
-            model += pulp.lpSum(x[i][k][n][j] for k in crops_double_season_irrigated + crops_double_season_greenhouse + crops_double_season_smart) == 1
+    #约束条件
+    for n in years:
+        for k in seasons:
+            for i in rows[k]:
+                for j in colnames:
+                    model += x[n][k][i][j] == 0.5 * y1[n][k][i][j] + y2[n][k][i][j] #x只能取0,0.5,1
+                    model += y1[n][k][i][j] + y2[n][k][i][j] <= 1 #y1 y2不同时为 1
+                model += pulp.lpSum(x[n][k][i][j] for j in colnames) <= 1 #每块地上每种作物比例之和不大于1
+            for j in colnames:
+                model += pulp.lpSum(y1[n][k][i][j] + y2[n][k][i][j] for i in rownames) <= 4 #每种作物尽量集中种植    
+                #水浇地
+                if i in i_D:
+                    model += pulp.lpSum(y1[n][k][i][j] + y2[n][k][i][j] for j in j_D['S2']) <= 1 #大白菜、白萝卜、红萝卜只能种一种
+        for i in i_D:
+            model += pulp.lpSum(y2[n]['S1'][i][j] for j in j_D['S1'])+ y1[n]['S1'][i]['水稻'] <= 1 #水稻与其他蔬菜不能混种
 
-for n in years[:-1]:
-    for i in plots_single_season:
-        for k in crops_single_season:
-            model += x[i][k][n][1] + x[i][k][n+1][1] <= 1
+        #不能连续种植
+        if n==2024:
+            for i in rownames:
+                for j in colnames:
+                    if i in i_ABC and j in j_ABC['S1']:
+                        model += x[2024]['S1'][i][j] + x2023['S1'][i][j] <= 1
+                    else:
+                        model += x[2024]['S1'][i][j] + x2023['S2'][i][j] <= 1
+                        model += x[2024]['S2'][i][j] + x[2024]['S1'][i][j] <= 1  
+        else:
+            for i in rownames:
+                for j in colnames:
+                    if (i in i_ABC) and (j in j_ABC['S1']):
+                        model += x[n]['S1'][i][j] + x[n-1]['S1'][i][j] <= 1
+                    else:
+                        model += x[n]['S1'][i][j] + x[n]['S2'][i][j] <= 1
+                        model += x[n-1]['S2'][i][j] + x[n]['S1'][i][j] <= 1
+            #连续三年内必须种豆
+            if n==2025:
+                for i in rownames:
+                    if i in i_ABC:
+                        model += pulp.lpSum(x[2025]['S1'][i][j] + x[2024]['S1'][i][j] + x2023['S1'][i][j] for j in j_bean_ABC) >= 1
+                    elif (i in i_D) or (i in i_E):
+                        model += pulp.lpSum(x[2025]['S1'][i][j] + x[2024]['S1'][i][j] + x2023['S1'][i][j] for j in j_bean_DEF) >= 1
+                    else:
+                        model += pulp.lpSum(x[2025]['S1'][i][j] + x[2024]['S2'][i][j] + x[2024]['S1'][i][j] + x2023['S2'][i][j] + x2023['S1'][i][j] for j in j_bean_DEF) >= 1
+                        model += pulp.lpSum(x[2025]['S2'][i][j] + x[2025]['S1'][i][j] + x[2024]['S2'][i][j] + x[2024]['S1'][i][j] + x2023['S2'][i][j] for j in j_bean_DEF) >= 1
+            else:
+                for i in rownames:
+                    if i in i_ABC:
+                        model += pulp.lpSum(x[n]['S1'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S1'][i][j] for j in j_bean_ABC) >= 1
+                    elif (i in i_D) or (i in i_E):
+                        model += pulp.lpSum(x[n]['S1'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S1'][i][j] for j in j_bean_DEF) >= 1
+                    else:
+                        model += pulp.lpSum(x[n]['S1'][i][j] + x[n-1]['S2'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S2'][i][j] + x[n-2]['S1'][i][j] for j in j_bean_DEF) >= 1
+                        model += pulp.lpSum(x[n]['S2'][i][j] + x[n]['S1'][i][j] + x[n-1]['S2'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S2'][i][j] for j in j_bean_DEF) >= 1
+                        
+    model.solve()
 
-    for i in plots_double_season:
-        for k in crops_double_season_irrigated + crops_double_season_greenhouse + crops_double_season_smart:
-            model += x[i][k][n][1] + x[i][k][n][2] <= 1
-            model += x[i][k][n][2] + x[i][k][n+1][1] <= 1
+    #将结果写入表格
+    write_excel(output_filename+'_{0}_{1}.xlsx'.format(eta,pulp.value(model.objective)),x)
 
+#问题一第一问
+solve_prob(read_data('./datas_1'),'result_1',eta=0)
+#问题一第二问
+solve_prob(read_data('./datas_1'),'result_1',eta=0.5)
 
-model.solve()
-
-results = []
-
-for i in plots_single_season + plots_double_season:
-    for k in crops_single_season + crops_double_season_irrigated + crops_double_season_greenhouse + crops_double_season_smart:
-        for n in years:
-            for j in [1, 2]:
-                if x[i][k][n][j].varValue is not None and x[i][k][n][j].varValue > 0:
-                    results.append([i, k, n, j, x[i][k][n][j].varValue])
-
-#用pandas把数据转化成框
-df_results = pd.DataFrame(results, columns=["地块", "作物", "年份", "季节", "种植比例"])
-
-#结果
-print(df_results)
-output_path = "optimization_results4.csv"
-df_results.to_csv(output_path, index=False)
