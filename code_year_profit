@@ -1,0 +1,104 @@
+import pulp
+import pandas as pd
+import numpy as np
+
+#基本参数
+years=[i for i in range(2024,2031)]
+seasons=['S1','S2']
+rownames=['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4']
+colnames=['黄豆', '黑豆', '红豆', '绿豆', '爬豆', '小麦', '玉米', '谷子', '高粱', '黍子', '荞麦', '南瓜', '红薯', '莜麦', '大麦', 
+          '水稻', '豇豆', '刀豆', '芸豆', '土豆', '西红柿', '茄子', '菠菜 ', '青椒', '菜花', '包菜', '油麦菜', '小青菜', '黄瓜', '生菜 ', '辣椒', '空心菜', '黄心菜', '芹菜',
+          '大白菜', '白萝卜', '红萝卜', '榆黄菇', '香菇', '白灵菇', '羊肚菌']
+rows={'S1':['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4'], 
+          'S2':['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4'],
+          'Si':['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6']}
+#聚类结果
+G={'G1':['黄豆','黑豆','红豆','绿豆','爬豆','谷子','红薯','莜麦'],
+   'G2':['小麦','玉米','高粱','黍子','大麦'],
+   'G3':['南瓜'],'G4':['荞麦'],
+   'G5':['豇豆','刀豆','芸豆','西红柿','菠菜 ','青椒','菜花','包菜','小青菜','辣椒'],
+   'G6':['茄子','油麦菜','黄瓜','生菜 ','空心菜','黄心菜'],
+   'G7':['土豆'],'G8':['芹菜'],
+   'G9': ['大白菜'],'G10':['白萝卜'],'G11':['红萝卜'],
+   'G12':['榆黄菇'],'G13':['香菇'],'G14':['白灵菇'],'G15':['羊肚菌']}
+G_colnames=['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14','G15']
+
+#单季地块：A，B，C
+i_ABC = rownames[0:26]
+#双季地块：D，E，F
+i_DEF = rownames[26:]
+#细分双季节
+i_D = rownames[26:34]
+i_E = rownames[34:50]
+i_F = rownames[50:]
+
+#定义作物类型
+j_ABC = {'S1':colnames[0:15],'S2':[]}
+j_D = {'S1':colnames[15:34],'S2':colnames[34:37]}
+j_E = {'S1':colnames[16:34],'S2':colnames[37:]}
+j_F = {'S1':colnames[16:34],'S2':colnames[16:34]}
+#定义豆类作物
+j_bean_ABC = colnames[0:5]
+j_bean_DEF = colnames[16:19]
+#数据聚类
+def G_data(p):
+    for k in seasons:
+        for i in rows[k]:
+            for g in G.values():
+                p.loc[(k,i),g] = p.loc[(k,i),g].mean()
+    return p
+
+#所有年份数据聚类读取
+def G_readfile_all(filename,invalid=0,ns=8):
+    data_axis0={}
+    for n in range(ns):
+        data_axis1={}
+        for k in seasons:
+            data_axis2={}
+            if k=='S2':
+                for i in rows['Si']:
+                    data_axis2[i]={j:invalid for j in colnames}
+            DS=G_data(pd.read_excel(filename,sheet_name=n,index_col=[0,1])).loc[k]
+            for i in rows[k]:
+                data_axis2[i]=dict(zip(colnames,list(DS.loc[i].values)))
+            data_axis1[k]=data_axis2
+        data_axis0[n+2023]=data_axis1
+    return data_axis0
+
+S=dict(zip(rownames,list(pd.read_excel('./datas_2/S.xlsx').values[0])))
+
+def calculate_profit(filepacks,xpacks=None,t=0):
+    x=G_readfile_all(filepacks+'/X.xlsx',ns=7)
+    #单价
+    p=G_readfile_all(filepacks+'/P.xlsx')
+    #销量
+    q=G_readfile_all(filepacks+'/Q.xlsx')
+    #亩产
+    y=G_readfile_all(filepacks+'/Y.xlsx')
+    #成本
+    c=G_readfile_all(filepacks+'/C.xlsx',9999999)
+    for n in years:
+        sum=0
+        for k in seasons:
+            for i in rownames:
+                for j in colnames:
+                    sum+=(p[n][k][i][j] * min(y[n][k][i][j]* x[n-1][k][i][j] , q[n][k][i][j])
+                + 0.5 * p[n][k][i][j] * max(0, y[n][k][i][j]* x[n-1][k][i][j]  - q[n][k][i][j]) 
+                - c[n][k][i][j] * x[n-1][k][i][j])
+        print('{0}: {1}'.format(n,sum))
+
+'''M=20
+for m in range(M):
+    print('问题二 随机 eta=0.5 第{0}次试验：'.format(m+1))
+    calculate_profit('./datas_2_rand/Rand ({0})'.format(m),'./result_2_Rand')'''
+
+print('问题三 eta=0.5')
+calculate_profit('./datas_2_E')
