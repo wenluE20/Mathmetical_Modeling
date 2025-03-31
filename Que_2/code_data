@@ -1,0 +1,146 @@
+#数据处理代码
+
+import numpy as np
+import pandas as pd
+import scipy
+from scipy import stats
+#7年,82个地块,41种作物
+Ny=7    #n
+Nf=82   #i
+Nc=41   #j
+#有效行
+cols="A:AQ"
+#行列名称
+colnames=['黄豆', '黑豆', '红豆', '绿豆', '爬豆', '小麦', '玉米', '谷子', '高粱', '黍子', '荞麦', '南瓜', '红薯', '莜麦', '大麦', 
+          '水稻', '豇豆', '刀豆', '芸豆', '土豆', '西红柿', '茄子', '菠菜 ', '青椒', '菜花', '包菜', '油麦菜', '小青菜', '黄瓜', '生菜 ', '辣椒', '空心菜', '黄心菜', '芹菜',
+          '大白菜', '白萝卜', '红萝卜', '榆黄菇', '香菇', '白灵菇', '羊肚菌']
+rownames=[['S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1',
+           'S1', 'S1', 'S1', 'S1', 'S1', 'S1',
+           'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1', 'S1',
+           'S1', 'S1', 'S1', 'S1', 
+           'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 'S2', 
+           'S2', 'S2', 'S2', 'S2'],
+          ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4']]
+dicr0={'季':rownames[0]}
+dicr1={'地块名':rownames[1]}
+
+def get_random_N(n=1,bound=(0,1)):
+    if type(n)==tuple or n>1:
+        return stats.norm.rvs(loc=bound[0],scale=bound[1],size=n)
+    else:
+        return float(stats.norm.rvs(loc=bound[0],scale=bound[1],size=1))
+
+def readfile_0(filename):
+    return pd.read_excel(filename,sheet_name=0,index_col=[0,1])
+
+def readfile_all(filename):
+    return [pd.read_excel(filename,sheet_name=n,index_col=[0,1]) for n in range(Ny)]
+
+def add_index(data):
+    data=list(data.T)
+    dic=dict(zip(colnames,data))
+    new_df=pd.DataFrame(dic)
+    new_df.insert(0,'季',rownames[0])
+    new_df.insert(1,'地块名',rownames[1])
+    new_df.set_index(['季','地块名'],append=True,drop=True,inplace=True)
+    new_df.reset_index(level=0,drop=True,inplace=True)
+    return new_df
+
+def file_process(input_filename:str,Alist:list,output_filename):
+    df=readfile_0(input_filename)
+    data=[df.values]
+    df.to_excel(output_filename,sheet_name='2023')
+    file=pd.ExcelWriter(output_filename,mode='a')
+    for n in range(Ny):
+        new_data=np.multiply(data[n],Alist[n])
+        data.append(new_data)
+        new_df=add_index(new_data)
+        new_df.to_excel(file,sheet_name='{0}'.format(2024+n))
+    file.close()
+    return None
+
+def Rand_datas(input_files,output_files):
+    Ap=[]
+    for n in range(Ny):
+        A1=np.ones(((Nf,16)))
+        A2=1.05*np.ones((Nf,21))
+        A3=0.97+0.01*get_random_N((Nf,3))
+        b=0.95*np.ones((Nf,1))
+        Ap.append(np.concatenate((A1,A2,A3,b),axis=-1))
+
+    Aq1=[np.ones((Nf,Nc)) for n in range(Ny)]
+    bq1=[1.075+0.0125*get_random_N((Nf,2)) for n in range(Ny)]
+    for n in range(Ny):
+        Aq1[n][::,5:7]=bq1[n]
+    
+    Aq2=[1+0.025*get_random_N((Nf,Nc)) for n in range(Ny)]
+    bq2=[np.ones((Nf,2)) for n in range(Ny)]
+    for n in range(Ny):
+        Aq2[n][::,5:7]=bq2[n]
+
+    Ay=[1+0.05*get_random_N((Nf,Nc)) for n in range(Ny)]
+
+    Ac=[1.05*np.ones((Nf,Nc)) for n in range(Ny)]
+
+    A=[Ap,Aq1,Ay,Ac]
+    for k in range(4):
+        file_process(input_files[k],A[k],output_files[k])
+    
+    df=[readfile_all(output_files[1])[n].copy() for n in range (Ny)]
+    df[0].to_excel(output_files[1],sheet_name='2023')
+    for n in range(Ny):
+        new_df=np.multiply(df[n],Aq2[n])
+        file=pd.ExcelWriter(output_files[1],mode='a')
+        new_df.to_excel(file,sheet_name='{0}'.format(2024+n))
+        file.close()
+    
+
+def E_datas(input_files,output_files):
+    Ap=[]
+    for n in range(Ny):
+        A1=np.ones(((Nf,16)))
+        A2=1.05*np.ones((Nf,21))
+        A3=0.97*np.ones((Nf,3))
+        b=0.95*np.ones((Nf,1))
+        Ap.append(np.concatenate((A1,A2,A3,b),axis=-1))
+
+    Aq=[np.ones((Nf,Nc)) for n in range(Ny)]
+    bq=[1.075*np.ones((Nf,2)) for n in range(Ny)]
+    for n in range(Ny):
+        Aq[n][::,5:7]=bq[n]
+
+    Ay=[np.ones((Nf,Nc)) for n in range(Ny)]
+
+    Ac=[1.05*np.ones((Nf,Nc)) for n in range(Ny)]
+
+    A=[Ap,Aq,Ay,Ac]
+    for k in range(4):
+        file_process(input_files[k],A[k],output_files[k])
+
+input_files=['./datas_1/P.xlsx',
+       './datas_1/Q.xlsx',
+       './datas_1/Y.xlsx',
+       './datas_1/C.xlsx']
+
+E_output=['./datas_2_E/P.xlsx',
+       './datas_2_E/Q.xlsx',
+       './datas_2_E/Y.xlsx',
+       './datas_2_E/C.xlsx']
+E_datas(input_files,E_output)
+
+M=20
+for m in range(M):
+    path='./datas_2_Rand/Rand ({0})'.format(m)
+    Rand_output=[path+'/P.xlsx',
+        path+'/Q.xlsx',
+        path+'/Y.xlsx',
+        path+'/C.xlsx']
+    Rand_datas(input_files,Rand_output)
+
+
+  
