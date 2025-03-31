@@ -1,0 +1,200 @@
+#混合整数规划和类蒙特卡洛处理
+
+import pulp
+import pandas as pd
+import numpy as np
+
+#基本参数
+years=[i for i in range(2024,2031)]
+seasons=['S1','S2']
+rownames=['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4']
+colnames=['黄豆', '黑豆', '红豆', '绿豆', '爬豆', '小麦', '玉米', '谷子', '高粱', '黍子', '荞麦', '南瓜', '红薯', '莜麦', '大麦', 
+          '水稻', '豇豆', '刀豆', '芸豆', '土豆', '西红柿', '茄子', '菠菜 ', '青椒', '菜花', '包菜', '油麦菜', '小青菜', '黄瓜', '生菜 ', '辣椒', '空心菜', '黄心菜', '芹菜',
+          '大白菜', '白萝卜', '红萝卜', '榆黄菇', '香菇', '白灵菇', '羊肚菌']
+rows={'S1':['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 
+           'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4'], 
+          'S2':['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'E10', 'E11', 'E12', 'E13', 'E14', 'E15', 'E16', 
+           'F1', 'F2', 'F3', 'F4'],
+          'Si':['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12', 'B13', 'B14', 
+           'C1', 'C2', 'C3', 'C4', 'C5', 'C6']}
+
+#单季地块：A，B，C
+i_ABC = rownames[0:26]
+#双季地块：D，E，F
+i_DEF = rownames[26:]
+#细分双季节
+i_D = rownames[26:34]
+i_E = rownames[34:50]
+i_F = rownames[50:]
+
+#定义作物类型
+j_ABC = {'S1':colnames[0:15],'S2':[]}
+j_D = {'S1':colnames[15:34],'S2':colnames[34:37]}
+j_E = {'S1':colnames[16:34],'S2':colnames[37:]}
+j_F = {'S1':colnames[16:34],'S2':colnames[16:34]}
+#定义豆类作物
+j_bean_ABC = colnames[0:5]
+j_bean_DEF = colnames[16:19]
+
+#数据读取
+#面积
+S=dict(zip(rownames,list(pd.read_excel('./datas_2/S.xlsx').values[0])))
+
+#2023年数据读取
+def readfile_0(filename,invalid=0):
+    data_axis1={}
+    for k in seasons:
+        data_axis2={}
+        if k=='S2':
+            for i in rows['Si']:
+                data_axis2[i]={j:invalid for j in colnames}
+        DS=pd.read_excel(filename,sheet_name=0,index_col=[0,1]).loc[k]
+        for i in rows[k]:
+            data_axis2[i]=dict(zip(colnames,list(DS.loc[i].values/S[i])))
+        data_axis1[k]=data_axis2  
+    return data_axis1
+#2023年种植情况
+x2023=readfile_0('./datas_2/X.xlsx')
+
+#所有年份数据读取
+def readfile_all(filename,invalid=0):
+    data_axis0={}
+    for n in range(8):
+        data_axis1={}
+        for k in seasons:
+            data_axis2={}
+            if k=='S2':
+                for i in rows['Si']:
+                    data_axis2[i]={j:invalid for j in colnames}
+            DS=pd.read_excel(filename,sheet_name=n,index_col=[0,1]).loc[k]
+            for i in rows[k]:
+                data_axis2[i]=dict(zip(colnames,list(DS.loc[i].values)))
+            data_axis1[k]=data_axis2
+        data_axis0[n+2023]=data_axis1
+    return data_axis0
+
+#数据组读取
+def read_data(filepacks):
+    #单价
+    p=readfile_all(filepacks+'/P.xlsx')
+    #销量
+    q=readfile_all(filepacks+'/Q.xlsx')
+    #亩产
+    y=readfile_all(filepacks+'/Y.xlsx')
+    #成本
+    c=readfile_all(filepacks+'/C.xlsx',9999999)
+    return (p,q,y,c)
+
+#结果写入表格
+def write_excel(filename,x):
+        file=pd.ExcelWriter(filename)
+        for n in years:
+            dic0={}
+            for j in colnames:
+                dic1={}
+                for k in seasons:
+                    for i in rows[k]:
+                        dic1[(k,i)]=x[n][k][i][j].varValue*S[i]
+                dic0[j]=dic1
+            pd.DataFrame(dic0,columns=colnames).to_excel(file,sheet_name='{0}'.format(n))
+        file.close()
+
+#求解：
+def solve_prob(datatuple,output_filename,eta=0): #设置单价衰减系数
+    #数据导入
+    p,q,y,c = datatuple
+
+    #创建问题
+    model = pulp.LpProblem("Crop_Planting_Optimization", pulp.LpMaximize)
+
+    #定义决策变量x[n][k][i][j] i块地在n年的k季节是否种植作物j
+    x = pulp.LpVariable.dicts("x", (years, seasons, rownames, colnames), 0, 1, cat='continuous')
+    y1 = pulp.LpVariable.dicts("y1", (years, seasons, rownames, colnames), 0, 1,cat='Binary')
+    y2 = pulp.LpVariable.dicts("y2", (years, seasons, rownames, colnames), 0, 1,cat='Binary')
+
+    #目标函数：最大利润
+    #利润目标函数
+    Profit = pulp.lpSum(
+                p[n][k][i][j] * min(y[n][k][i][j] * S[i], q[n][k][i][j]) * x[n][k][i][j]
+                + eta * p[n][k][i][j] * max(0, y[n][k][i][j] * S[i] - q[n][k][i][j]) * x[n][k][i][j]
+                - c[n][k][i][j] * S[i] * x[n][k][i][j]
+                for n in years
+                for k in seasons
+                for i in rows[k]
+                for j in colnames
+                )
+    model += Profit
+
+    #约束条件
+    for n in years:
+        for k in seasons:
+            for i in rows[k]:
+                for j in colnames:
+                    model += x[n][k][i][j] == 0.5 * y1[n][k][i][j] + y2[n][k][i][j] #x只能取0,0.5,1
+                    model += y1[n][k][i][j] + y2[n][k][i][j] <= 1 #y1 y2不同时为 1
+                model += pulp.lpSum(x[n][k][i][j] for j in colnames) <= 1 #每块地上每种作物比例之和不大于1
+            for j in colnames:
+                model += pulp.lpSum(y1[n][k][i][j] + y2[n][k][i][j] for i in rownames) <= 4 #每种作物尽量集中种植    
+                #水浇地
+                if i in i_D:
+                    model += pulp.lpSum(y1[n][k][i][j] + y2[n][k][i][j] for j in j_D['S2']) <= 1 #大白菜、白萝卜、红萝卜只能种一种
+        for i in i_D:
+            model += pulp.lpSum(y2[n]['S1'][i][j] for j in j_D['S1'])+ y1[n]['S1'][i]['水稻'] <= 1 #水稻与其他蔬菜不能混种
+
+        #不能连续种植
+        if n==2024:
+            for i in rownames:
+                for j in colnames:
+                    if i in i_ABC and j in j_ABC['S1']:
+                        model += x[2024]['S1'][i][j] + x2023['S1'][i][j] <= 1
+                    else:
+                        model += x[2024]['S1'][i][j] + x2023['S2'][i][j] <= 1
+                        model += x[2024]['S2'][i][j] + x[2024]['S1'][i][j] <= 1  
+        else:
+            for i in rownames:
+                for j in colnames:
+                    if (i in i_ABC) and (j in j_ABC['S1']):
+                        model += x[n]['S1'][i][j] + x[n-1]['S1'][i][j] <= 1
+                    else:
+                        model += x[n]['S1'][i][j] + x[n]['S2'][i][j] <= 1
+                        model += x[n-1]['S2'][i][j] + x[n]['S1'][i][j] <= 1
+            #连续三年内必须种豆
+            if n==2025:
+                for i in rownames:
+                    if i in i_ABC:
+                        model += pulp.lpSum(x[2025]['S1'][i][j] + x[2024]['S1'][i][j] + x2023['S1'][i][j] for j in j_bean_ABC) >= 1
+                    elif (i in i_D) or (i in i_E):
+                        model += pulp.lpSum(x[2025]['S1'][i][j] + x[2024]['S1'][i][j] + x2023['S1'][i][j] for j in j_bean_DEF) >= 1
+                    else:
+                        model += pulp.lpSum(x[2025]['S1'][i][j] + x[2024]['S2'][i][j] + x[2024]['S1'][i][j] + x2023['S2'][i][j] + x2023['S1'][i][j] for j in j_bean_DEF) >= 1
+                        model += pulp.lpSum(x[2025]['S2'][i][j] + x[2025]['S1'][i][j] + x[2024]['S2'][i][j] + x[2024]['S1'][i][j] + x2023['S2'][i][j] for j in j_bean_DEF) >= 1
+            else:
+                for i in rownames:
+                    if i in i_ABC:
+                        model += pulp.lpSum(x[n]['S1'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S1'][i][j] for j in j_bean_ABC) >= 1
+                    elif (i in i_D) or (i in i_E):
+                        model += pulp.lpSum(x[n]['S1'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S1'][i][j] for j in j_bean_DEF) >= 1
+                    else:
+                        model += pulp.lpSum(x[n]['S1'][i][j] + x[n-1]['S2'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S2'][i][j] + x[n-2]['S1'][i][j] for j in j_bean_DEF) >= 1
+                        model += pulp.lpSum(x[n]['S2'][i][j] + x[n]['S1'][i][j] + x[n-1]['S2'][i][j] + x[n-1]['S1'][i][j] + x[n-2]['S2'][i][j] for j in j_bean_DEF) >= 1
+                        
+    model.solve()
+
+    #将结果写入表格
+    write_excel(output_filename+'_{0}_{1}.xlsx'.format(eta,pulp.value(model.objective)),x)
+    return pulp.value(model.objective)
+
+#问题二期望利润规划
+#solve_prob(read_data('./datas_2_E'),'result_2_E',0.5)
+
+#问题二风险评估
+M=20
+profits=[]
+for m in range(M):
+    profits.append(solve_prob(read_data('./datas_2_Rand/Rand ({0})'.format(m)),'./result_2_rand/result_2_rand_{0}'.format(m),0.5))
+print(profits)
